@@ -4,35 +4,34 @@ import GRDB
 class DatabaseMigratorTests : GRDBTestCase {
     
     func testEmptyMigratorSync() throws {
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             let migrator = DatabaseMigrator()
             try migrator.migrate(writer)
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testEmptyMigratorAsync() throws {
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             let expectation = self.expectation(description: "")
             let migrator = DatabaseMigrator()
-            migrator.asyncMigrate(writer, completion: { db, error in
+            migrator.asyncMigrate(writer, completion: { dbResult in
                 // No migration error
-                XCTAssertNil(error)
+                let db = try! dbResult.get()
+                
                 // Write access
                 try! db.execute(sql: "CREATE TABLE t(a)")
                 expectation.fulfill()
             })
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testEmptyMigratorPublisher() throws {
@@ -40,21 +39,20 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             let migrator = DatabaseMigrator()
             let publisher = migrator.migratePublisher(writer)
             let recorder = publisher.record()
             try wait(for: recorder.single, timeout: 1)
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testNonEmptyMigratorSync() throws {
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("createPersons") { db in
                 try db.execute(sql: """
@@ -92,14 +90,13 @@ class DatabaseMigratorTests : GRDBTestCase {
             }
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testNonEmptyMigratorAsync() throws {
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("createPersons") { db in
                 try db.execute(sql: """
@@ -125,29 +122,28 @@ class DatabaseMigratorTests : GRDBTestCase {
             }
             
             let expectation = self.expectation(description: "")
-            migrator.asyncMigrate(writer, completion: { (db, error) in
+            migrator.asyncMigrate(writer, completion: { dbResult in
                 // No migration error
-                XCTAssertNil(error)
+                let db = try! dbResult.get()
                 
                 XCTAssertTrue(try! db.tableExists("persons"))
                 XCTAssertTrue(try! db.tableExists("pets"))
                 
-                migrator2.asyncMigrate(writer, completion: { db, error in
+                migrator2.asyncMigrate(writer, completion: { dbResult in
                     // No migration error
-                    XCTAssertNil(error)
+                    let db = try! dbResult.get()
                     
                     XCTAssertTrue(try! db.tableExists("persons"))
                     XCTAssertFalse(try! db.tableExists("pets"))
                     expectation.fulfill()
                 })
             })
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testNonEmptyMigratorPublisher() throws {
@@ -155,7 +151,7 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("createPersons") { db in
                 try db.execute(sql: """
@@ -201,10 +197,9 @@ class DatabaseMigratorTests : GRDBTestCase {
             }
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
 
     func testEmptyMigratorPublisherIsAsynchronous() throws {
@@ -212,7 +207,7 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             let migrator = DatabaseMigrator()
             let expectation = self.expectation(description: "")
             let semaphore = DispatchSemaphore(value: 0)
@@ -224,14 +219,13 @@ class DatabaseMigratorTests : GRDBTestCase {
                 })
             
             semaphore.signal()
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
             cancellable.cancel()
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testNonEmptyMigratorPublisherIsAsynchronous() throws {
@@ -239,7 +233,7 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("first", migrate: { _ in })
             let expectation = self.expectation(description: "")
@@ -252,14 +246,13 @@ class DatabaseMigratorTests : GRDBTestCase {
                 })
             
             semaphore.signal()
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
             cancellable.cancel()
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testMigratorPublisherDefaultScheduler() throws {
@@ -267,7 +260,7 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) {
+        func test<Writer: DatabaseWriter>(writer: Writer) {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("first", migrate: { _ in })
             let expectation = self.expectation(description: "")
@@ -282,14 +275,13 @@ class DatabaseMigratorTests : GRDBTestCase {
                     expectation.fulfill()
                 })
             
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
             cancellable.cancel()
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testMigratorPublisherCustomScheduler() throws {
@@ -297,7 +289,7 @@ class DatabaseMigratorTests : GRDBTestCase {
             throw XCTSkip("Combine is not available")
         }
         
-        func test(writer: DatabaseWriter) {
+        func test<Writer: DatabaseWriter>(writer: Writer) {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("first", migrate: { _ in })
             let queue = DispatchQueue(label: "test")
@@ -313,18 +305,17 @@ class DatabaseMigratorTests : GRDBTestCase {
                     expectation.fulfill()
                 })
             
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
             cancellable.cancel()
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
 
     func testMigrateUpTo() throws {
-        func test(writer: DatabaseWriter) throws {
+        func test(writer: some DatabaseWriter) throws {
             var migrator = DatabaseMigrator()
             migrator.registerMigration("a") { db in
                 try db.execute(sql: "CREATE TABLE a (id INTEGER PRIMARY KEY)")
@@ -369,10 +360,9 @@ class DatabaseMigratorTests : GRDBTestCase {
             // try migrator.migrate(writer, upTo: "b")
         }
         
-        try Test(test)
-            .run { DatabaseQueue() }
-            .runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
-            .runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
+        try Test(test).run { try DatabaseQueue() }
+        try Test(test).runAtTemporaryDatabasePath { try DatabaseQueue(path: $0) }
+        try Test(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
     func testMigrationFailureTriggersRollback() throws {
@@ -413,21 +403,28 @@ class DatabaseMigratorTests : GRDBTestCase {
         do {
             let expectation = self.expectation(description: "")
             let dbQueue = try makeDatabaseQueue()
-            migrator.asyncMigrate(dbQueue, completion: { db, error in
+            migrator.asyncMigrate(dbQueue, completion: { dbResult in
                 // The first migration should be committed.
                 // The second migration should be rollbacked.
                 
-                let error = error as! DatabaseError
+                guard case let .failure(error as DatabaseError) = dbResult else {
+                    XCTFail("Expected DatabaseError")
+                    expectation.fulfill()
+                    return
+                }
+                
                 XCTAssertEqual(error.extendedResultCode, .SQLITE_CONSTRAINT_FOREIGNKEY)
                 XCTAssertEqual(error.resultCode, .SQLITE_CONSTRAINT)
                 XCTAssertEqual(error.message, #"FOREIGN KEY constraint violation - from pets(masterId) to persons(id), in [masterId:123 name:"Bobby"]"#)
                 
-                let names = try! String.fetchAll(db, sql: "SELECT name FROM persons")
-                XCTAssertEqual(names, ["Arthur"])
-                
-                expectation.fulfill()
+                dbQueue.asyncRead { dbResult in
+                    let names = try! String.fetchAll(dbResult.get(), sql: "SELECT name FROM persons")
+                    XCTAssertEqual(names, ["Arthur"])
+                    
+                    expectation.fulfill()
+                }
             })
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 5, handler: nil)
         }
     }
     

@@ -196,7 +196,7 @@ public struct Configuration {
     ///
     /// For example:
     ///
-    ///     let dbQueue = DatabaseQueue()
+    ///     let dbQueue = try DatabaseQueue()
     ///
     ///     // fatal error: A transaction has been left opened at the end of a database access
     ///     try dbQueue.inDatabase { db in
@@ -208,7 +208,7 @@ public struct Configuration {
     ///
     ///     var config = Configuration()
     ///     config.allowsUnsafeTransactions = true
-    ///     let dbQueue = DatabaseQueue(configuration: config)
+    ///     let dbQueue = try DatabaseQueue(configuration: config)
     ///
     ///     try dbQueue.inDatabase { db in
     ///         try db.beginTransaction()
@@ -245,8 +245,13 @@ public struct Configuration {
     ///
     /// The quality of service is ignored if you supply a target queue.
     ///
-    /// Default: .default
-    public var qos: DispatchQoS = .default
+    /// Default: .userInitiated
+    public var qos: DispatchQoS = .userInitiated
+    
+    /// The quality of service of read accesses
+    var readQoS: DispatchQoS {
+        targetQueue?.qos ?? self.qos
+    }
     
     /// A target queue for database accesses.
     ///
@@ -270,7 +275,15 @@ public struct Configuration {
     ///
     /// Default: nil
     public var writeTargetQueue: DispatchQueue? = nil
-    
+
+#if os(iOS)
+    /// Sets whether GRDB will release memory when entering the background or
+    /// upon receiving a memory warning in iOS.
+    ///
+    /// Default: true
+    public var automaticMemoryManagement = true
+#endif
+
     // MARK: - Factory Configuration
     
     /// Creates a factory configuration
@@ -282,9 +295,12 @@ public struct Configuration {
     var SQLiteConnectionDidOpen: (() -> Void)?
     var SQLiteConnectionWillClose: ((SQLiteConnection) -> Void)?
     var SQLiteConnectionDidClose: (() -> Void)?
-    var SQLiteOpenFlags: Int32 {
-        let readWriteFlags = readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE)
-        return threadingMode.SQLiteOpenFlags | readWriteFlags
+    var SQLiteOpenFlags: CInt {
+        var flags = readonly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE)
+        if sqlite3_libversion_number() >= 3037000 {
+            flags |= 0x02000000 // SQLITE_OPEN_EXRESCODE
+        }
+        return threadingMode.SQLiteOpenFlags | flags
     }
     
     func setUp(_ db: Database) throws {
@@ -312,19 +328,6 @@ public struct Configuration {
     func makeReaderDispatchQueue(label: String) -> DispatchQueue {
         if let targetQueue = targetQueue {
             return DispatchQueue(label: label, target: targetQueue)
-        } else {
-            return DispatchQueue(label: label, qos: qos)
-        }
-    }
-    
-    /// Creates a DispatchQueue which has the quality of service of
-    /// read accesses.
-    ///
-    /// The returned queue has no target queue, and won't create deadlocks when
-    /// used synchronously from a database access.
-    func makeDispatchQueue(label: String) -> DispatchQueue {
-        if let targetQueue = targetQueue {
-            return DispatchQueue(label: label, qos: targetQueue.qos)
         } else {
             return DispatchQueue(label: label, qos: qos)
         }
