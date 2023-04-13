@@ -16,6 +16,8 @@ SDKS=(
 
 rm -rf GRDB.xcframework.zip
 
+make SQLiteCustom
+
 FRAMEWORKS=()
 for SDK in "${SDKS[@]}"; do
   echo "Running xcodebuild -sdk ${SDK} ${COMMON_FLAGS[@]} -archivePath GRDB-${SDK}.xcarchive"
