@@ -313,7 +313,7 @@ class ValueObservationTests: GRDBTestCase {
             }
         }
     }
-
+    
     // MARK: - Snapshot Optimization
     
     func testDisallowedSnapshotOptimizationWithAsyncScheduler() throws {
@@ -412,8 +412,8 @@ class ValueObservationTests: GRDBTestCase {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                     try! dbPool.write { db in
                         try db.execute(sql: """
-                        INSERT INTO t DEFAULT VALUES;
-                        """)
+                            INSERT INTO t DEFAULT VALUES;
+                            """)
                     }
                 }
             }
@@ -421,13 +421,13 @@ class ValueObservationTests: GRDBTestCase {
         }
         
         let expectedCounts: [Int]
-        #if os(macOS) || targetEnvironment(macCatalyst) || GRDBCIPHER || (GRDBCUSTOMSQLITE && !SQLITE_ENABLE_SNAPSHOT)
-        // Optimization not available
-        expectedCounts = [0, 0, 1]
-        #else
+#if SQLITE_ENABLE_SNAPSHOT || (!GRDBCUSTOMSQLITE && !GRDBCIPHER && (compiler(>=5.7.1) || !(os(macOS) || targetEnvironment(macCatalyst))))
         // Optimization available
         expectedCounts = [0, 1]
-        #endif
+#else
+        // Optimization not available
+        expectedCounts = [0, 0, 1]
+#endif
         
         let expectation = self.expectation(description: "")
         expectation.expectedFulfillmentCount = expectedCounts.count
@@ -471,13 +471,13 @@ class ValueObservationTests: GRDBTestCase {
         }
         
         let expectedCounts: [Int]
-        #if os(macOS) || targetEnvironment(macCatalyst) || GRDBCIPHER || (GRDBCUSTOMSQLITE && !SQLITE_ENABLE_SNAPSHOT)
-        // Optimization not available
-        expectedCounts = [0, 0, 1]
-        #else
+#if SQLITE_ENABLE_SNAPSHOT || (!GRDBCUSTOMSQLITE && !GRDBCIPHER && (compiler(>=5.7.1) || !(os(macOS) || targetEnvironment(macCatalyst))))
         // Optimization available
         expectedCounts = [0, 1]
-        #endif
+#else
+        // Optimization not available
+        expectedCounts = [0, 0, 1]
+#endif
         
         let expectation = self.expectation(description: "")
         expectation.expectedFulfillmentCount = expectedCounts.count
@@ -495,6 +495,33 @@ class ValueObservationTests: GRDBTestCase {
             XCTAssertEqual(observedCounts, expectedCounts)
         }
     }
+    
+    // MARK: - Snapshot Observation
+    
+#if SQLITE_ENABLE_SNAPSHOT || (!GRDBCUSTOMSQLITE && !GRDBCIPHER && (compiler(>=5.7.1) || !(os(macOS) || targetEnvironment(macCatalyst))))
+    func testDatabaseSnapshotPoolObservation() throws {
+        let dbPool = try makeDatabasePool()
+        try dbPool.write { try $0.execute(sql: "CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT)") }
+        
+        let expectation = XCTestExpectation()
+        expectation.assertForOverFulfill = false
+        
+        let observation = ValueObservation.trackingConstantRegion { db in
+            try db.registerAccess(to: Table("t"))
+            expectation.fulfill()
+            return try DatabaseSnapshotPool(db)
+        }
+        
+        let recorder = observation.record(in: dbPool)
+        wait(for: [expectation], timeout: 5)
+        try dbPool.write { try $0.execute(sql: "INSERT INTO t DEFAULT VALUES") }
+        
+        let results = try wait(for: recorder.next(2), timeout: 5)
+        XCTAssertEqual(results.count, 2)
+        try XCTAssertEqual(results[0].read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM t")! }, 0)
+        try XCTAssertEqual(results[1].read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM t")! }, 1)
+    }
+#endif
     
     // MARK: - Cancellation
     
@@ -515,7 +542,7 @@ class ValueObservationTests: GRDBTestCase {
         }
         
         // Start observation and deallocate cancellable after second change
-        var cancellable: DatabaseCancellable?
+        var cancellable: (any DatabaseCancellable)?
         cancellable = observation.start(
             in: dbQueue,
             onError: { error in XCTFail("Unexpected error: \(error)") },
@@ -561,7 +588,7 @@ class ValueObservationTests: GRDBTestCase {
         }
         
         // Start observation and cancel cancellable after second change
-        var cancellable: DatabaseCancellable!
+        var cancellable: (any DatabaseCancellable)!
         cancellable = observation.start(
             in: dbQueue,
             onError: { error in XCTFail("Unexpected error: \(error)") },
@@ -599,7 +626,7 @@ class ValueObservationTests: GRDBTestCase {
             notificationExpectation.expectedFulfillmentCount = 2
 
             do {
-                var cancellable: DatabaseCancellable? = nil
+                var cancellable: (any DatabaseCancellable)? = nil
                 _ = cancellable // Avoid "Variable 'cancellable' was written to, but never read" warning
                 var shouldStopObservation = false
                 let observation = ValueObservation(
@@ -643,7 +670,7 @@ class ValueObservationTests: GRDBTestCase {
             notificationExpectation.expectedFulfillmentCount = 2
             
             do {
-                var cancellable: DatabaseCancellable? = nil
+                var cancellable: (any DatabaseCancellable)? = nil
                 _ = cancellable // Avoid "Variable 'cancellable' was written to, but never read" warning
                 var shouldStopObservation = false
                 let observation = ValueObservation(
@@ -729,7 +756,7 @@ class ValueObservationTests: GRDBTestCase {
     
     // MARK: - Async Await
     
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    @available(iOS 13, macOS 10.15, tvOS 13, watchOS 6, *)
     func testAsyncAwait_values_prefix() async throws {
         func test(_ writer: some DatabaseWriter) async throws {
             // We need something to change
@@ -755,7 +782,11 @@ class ValueObservationTests: GRDBTestCase {
             assertValueObservationRecordingMatch(recorded: counts, expected: [0, 1, 2])
             
             // Observation was ended
+#if compiler(>=5.8)
+            await fulfillment(of: [cancellationExpectation], timeout: 2)
+#else
             wait(for: [cancellationExpectation], timeout: 2)
+#endif
         }
         
         try await AsyncTest(test).run { try DatabaseQueue() }
@@ -763,7 +794,7 @@ class ValueObservationTests: GRDBTestCase {
         try await AsyncTest(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    @available(iOS 13, macOS 10.15, tvOS 13, watchOS 6, *)
     func testAsyncAwait_values_prefix_immediate_scheduling() async throws {
         func test(_ writer: some DatabaseWriter) async throws {
             // We need something to change
@@ -789,7 +820,11 @@ class ValueObservationTests: GRDBTestCase {
             assertValueObservationRecordingMatch(recorded: counts, expected: [0, 1, 2])
             
             // Observation was ended
+#if compiler(>=5.8)
+            await fulfillment(of: [cancellationExpectation], timeout: 2)
+#else
             wait(for: [cancellationExpectation], timeout: 2)
+#endif
         }
         
         try await AsyncTest(test).run { try DatabaseQueue() }
@@ -797,7 +832,7 @@ class ValueObservationTests: GRDBTestCase {
         try await AsyncTest(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    @available(iOS 13, macOS 10.15, tvOS 13, watchOS 6, *)
     func testAsyncAwait_values_break() async throws {
         func test(_ writer: some DatabaseWriter) async throws {
             // We need something to change
@@ -827,7 +862,11 @@ class ValueObservationTests: GRDBTestCase {
             assertValueObservationRecordingMatch(recorded: counts, expected: [0, 1, 2])
             
             // Observation was ended
+#if compiler(>=5.8)
+            await fulfillment(of: [cancellationExpectation], timeout: 2)
+#else
             wait(for: [cancellationExpectation], timeout: 2)
+#endif
         }
         
         try await AsyncTest(test).run { try DatabaseQueue() }
@@ -835,7 +874,7 @@ class ValueObservationTests: GRDBTestCase {
         try await AsyncTest(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    @available(iOS 13, macOS 10.15, tvOS 13, watchOS 6, *)
     func testAsyncAwait_values_immediate_break() async throws {
         func test(_ writer: some DatabaseWriter) async throws {
             // We need something to change
@@ -862,7 +901,11 @@ class ValueObservationTests: GRDBTestCase {
             assertValueObservationRecordingMatch(recorded: counts, expected: [0])
             
             // Observation was ended
+#if compiler(>=5.8)
+            await fulfillment(of: [cancellationExpectation], timeout: 2)
+#else
             wait(for: [cancellationExpectation], timeout: 2)
+#endif
         }
         
         try await AsyncTest(test).run { try DatabaseQueue() }
@@ -870,7 +913,7 @@ class ValueObservationTests: GRDBTestCase {
         try await AsyncTest(test).runAtTemporaryDatabasePath { try DatabasePool(path: $0) }
     }
     
-    @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+    @available(iOS 13, macOS 10.15, tvOS 13, watchOS 6, *)
     func testAsyncAwait_values_cancelled() async throws {
         func test(_ writer: some DatabaseWriter) async throws {
             // We need something to change
@@ -909,7 +952,11 @@ class ValueObservationTests: GRDBTestCase {
             XCTAssertEqual(cancelledValue, "cancelled loop")
             
             // Make sure observation was cancelled as well
+#if compiler(>=5.8)
+            await fulfillment(of: [cancellationExpectation], timeout: 2)
+#else
             wait(for: [cancellationExpectation], timeout: 2)
+#endif
         }
         
         try await AsyncTest(test).run { try DatabaseQueue() }

@@ -1,6 +1,7 @@
 import Foundation
 
 extension FetchableRecord where Self: Decodable {
+    /// Creates a record from `row`, using the `Decodable` conformance.
     public init(row: Row) throws {
         self = try RowDecoder().decode(from: row)
     }
@@ -97,7 +98,7 @@ private struct _RowDecoder<R: FetchableRecord>: Decoder {
         
         func contains(_ key: Key) -> Bool {
             let row = decoder.row
-            if let _columnForKey = _columnForKey {
+            if let _columnForKey {
                 if let column = _columnForKey[key.stringValue] {
                     assert(row.hasColumn(column))
                     return true
@@ -298,7 +299,7 @@ private struct _RowDecoder<R: FetchableRecord>: Decoder {
             // "book", which is not the name of a column, and not the name of a
             // scope) has to be decoded right from the base row. But this can
             // happen only once.
-            if let decodedRootKey = decodedRootKey {
+            if let decodedRootKey {
                 let keys = [decodedRootKey.stringValue, key.stringValue].sorted()
                 throw DecodingError.keyNotFound(key, DecodingError.Context(
                                                     codingPath: codingPath,
@@ -367,10 +368,16 @@ private struct _RowDecoder<R: FetchableRecord>: Decoder {
                 return try T(from: columnDecoder)
             } catch is JSONRequiredError {
                 // Decode from JSON
-                let data = try row.decodeDataNoCopy(atIndex: index)
-                return try R
-                    .databaseJSONDecoder(for: key.stringValue)
-                    .decode(type.self, from: data)
+                return try row.withUnsafeData(atIndex: index) { data in
+                    guard let data else {
+                        throw DecodingError.valueNotFound(Data.self, DecodingError.Context(
+                            codingPath: codingPath + [key],
+                            debugDescription: "Missing Data"))
+                    }
+                    return try R
+                        .databaseJSONDecoder(for: key.stringValue)
+                        .decode(type.self, from: data)
+                }
             }
         }
     }

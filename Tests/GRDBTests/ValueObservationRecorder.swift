@@ -219,7 +219,7 @@ extension ValueObservationRecorder {
 extension ValueObservation {
     public func record(
         in reader: some DatabaseReader,
-        scheduling scheduler: ValueObservationScheduler = .async(onQueue: .main),
+        scheduling scheduler: some ValueObservationScheduler = .async(onQueue: .main),
         onError: ((Error) -> Void)? = nil,
         onChange: ((Reducer.Value) -> Void)? = nil)
     -> ValueObservationRecorder<Reducer.Value>
@@ -365,7 +365,7 @@ extension GRDBTestCase {
     {
         func test(
             observation: ValueObservation<Reducer>,
-            scheduling scheduler: ValueObservationScheduler,
+            scheduling scheduler: some ValueObservationScheduler,
             testValueDispatching: @escaping () -> Void) throws
         {
             func testRecordingEqualWhenWriteAfterStart(writer: some DatabaseWriter) throws {
@@ -567,7 +567,7 @@ extension GRDBTestCase {
     
     func assertValueObservation<Reducer: ValueReducer, Failure: Error>(
         _ observation: ValueObservation<Reducer>,
-        fails testFailure: (Failure, DatabaseWriter) throws -> Void,
+        fails testFailure: (Failure, any DatabaseWriter) throws -> Void,
         setup: (Database) throws -> Void,
         file: StaticString = #file,
         line: UInt = #line)
@@ -575,7 +575,7 @@ extension GRDBTestCase {
     {
         func test(
             observation: ValueObservation<Reducer>,
-            scheduling scheduler: ValueObservationScheduler,
+            scheduling scheduler: some ValueObservationScheduler,
             testErrorDispatching: @escaping () -> Void) throws
         {
             func test(writer: some DatabaseWriter) throws {
@@ -668,7 +668,7 @@ extension ValueObservationExpectations {
                     consume(1)
                     return next
                 }
-                if let error = error {
+                if let error {
                     throw error
                 } else {
                     throw ValueRecordingError.notEnoughValues
@@ -696,7 +696,7 @@ extension ValueObservationExpectations {
                 if remainingValues.isEmpty == false {
                     return
                 }
-                if let error = error {
+                if let error {
                     throw error
                 }
             }
@@ -732,7 +732,7 @@ extension ValueObservationExpectations {
                     consume(count)
                     return Array(remainingValues.prefix(count))
                 }
-                if let error = error {
+                if let error {
                     throw error
                 } else {
                     throw ValueRecordingError.notEnoughValues
@@ -783,7 +783,7 @@ extension ValueObservationExpectations {
                     consume(extraCount)
                     return Array(values.prefix(matchedCount))
                 }
-                if let error = error {
+                if let error {
                     throw error
                 }
                 consume(remainingValues.count)
@@ -807,7 +807,7 @@ extension ValueObservationExpectations {
         
         public func get() throws -> (values: [Value], error: Error) {
             try recorder.value { (values, error, remainingValues, consume) in
-                if let error = error {
+                if let error {
                     consume(remainingValues.count)
                     return (values: values, error: error)
                 } else {
