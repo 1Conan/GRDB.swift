@@ -11,10 +11,9 @@ COMMON_FLAGS=(
 SDKS=(
   "iphoneos"
   "iphonesimulator"
-  "macosx"
 )
 
-rm -rf GRDB.xcframework.zip
+rm -rf GRDB.xcframework.zip GRDB.xcframework *.xcarchive
 
 make SQLiteCustom
 
