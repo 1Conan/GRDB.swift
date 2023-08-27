@@ -47,10 +47,10 @@ OTHER_SWIFT_FLAGS = '$$(inherited) -D SQLITE_ENABLE_FTS5 -D SQLITE_ENABLE_PREUPD
 GCC_PREPROCESSOR_DEFINITIONS = '$$(inherited) GRDB_SQLITE_ENABLE_PREUPDATE_HOOK=1'
 
 # Extract min and max destinations from the available devices
-MIN_IOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep iPhone | grep -v ^13\.7 | sort -n | head -1 | cut -wf 3 | sed 's/\(.*\)/"platform=iOS Simulator,id=\1"/')
-MAX_IOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep iPhone | grep -v ^13\.7 | sort -rn | head -1 | cut -wf 3 | sed 's/\(.*\)/"platform=iOS Simulator,id=\1"/')
-MIN_TVOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep tvOS | sort -n | head -1 | cut -wf 3 | sed 's/\(.*\)/"platform=tvOS Simulator,id=\1"/')
-MAX_TVOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep tvOS | sort -rn | head -1 | cut -wf 3 | sed 's/\(.*\)/"platform=tvOS Simulator,id=\1"/')
+MIN_IOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep iPhone | grep -v ^13\.7 | sort -n | head -1 | cut -d' ' -f3 | sed 's/\(.*\)/"platform=iOS Simulator,id=\1"/')
+MAX_IOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep iPhone | grep -v ^13\.7 | sort -rn | head -1 | cut -d' ' -f3 | sed 's/\(.*\)/"platform=iOS Simulator,id=\1"/')
+MIN_TVOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep tvOS | sort -n | head -1 | cut -d' ' -f3 | sed 's/\(.*\)/"platform=tvOS Simulator,id=\1"/')
+MAX_TVOS_DESTINATION := $(shell xcrun simctl list -j devices available | Scripts/destination.rb | grep tvOS | sort -rn | head -1 | cut -d' ' -f3 | sed 's/\(.*\)/"platform=tvOS Simulator,id=\1"/')
 
   # If xcbeautify or xcpretty is available, use it for xcodebuild output, except in CI.
 XCPRETTY =
